@@ -1,10 +1,13 @@
 #!/bin/bash
 # =============================================================================
 # Phase 0: Last War Bot Server Setup
-# Target: Hetzner CX43, Ubuntu 24.04 LTS (204.168.149.6)
+# Target: Hetzner CPX42, Ubuntu 24.04 LTS
+# Mode:   Software Emulation (kein KVM -- Hetzner Cloud hat kein nested virt)
 # Usage:  sudo bash scripts/00_setup_server.sh
 # =============================================================================
 set -euo pipefail
+
+export DEBIAN_FRONTEND=noninteractive
 
 LOG="/var/log/lastwar-setup.log"
 exec > >(tee -a "$LOG") 2>&1
@@ -12,27 +15,15 @@ exec > >(tee -a "$LOG") 2>&1
 echo "=== Last War Bot Server Setup === $(date)"
 
 # -----------------------------------------------------------------------------
-# 1. KVM pruefen (KRITISCH -- Emulator braucht Hardware-Virtualisierung)
+# 1. System-Dependencies
 # -----------------------------------------------------------------------------
-echo "[1/8] Pruefe KVM-Support..."
+echo "[1/7] Installiere System-Dependencies..."
 apt-get update -qq
-apt-get install -y cpu-checker qemu-kvm libvirt-daemon-system
-if ! kvm-ok; then
-  echo "FEHLER: KVM nicht verfuegbar. Emulator laeuft sehr langsam ohne HW-Acceleration."
-  echo "Pruefe: Hetzner CX-Server unterstuetzen KVM. Ggf. anderes Rechenzentrum waehlen."
-  exit 1
-fi
-echo "OK: KVM verfuegbar"
-
-# -----------------------------------------------------------------------------
-# 2. System-Dependencies
-# -----------------------------------------------------------------------------
-echo "[2/8] Installiere System-Dependencies..."
 apt-get install -y \
-  openjdk-21-jdk \
+  openjdk-21-jdk-headless \
   wget unzip curl git \
   python3.12 python3.12-venv python3-pip \
-  libgl1-mesa-glx libglib2.0-0 \
+  libgl1-mesa-glx libglib2.0-0 libpulse0 \
   tesseract-ocr tesseract-ocr-deu \
   adb \
   screen \
@@ -44,16 +35,16 @@ systemctl enable --now redis-server
 echo "OK: System-Dependencies + Redis installiert"
 
 # -----------------------------------------------------------------------------
-# 3. Python 3.12 (nativ auf Ubuntu 24.04)
+# 2. Python 3.12 (nativ auf Ubuntu 24.04)
 # -----------------------------------------------------------------------------
-echo "[3/8] Pruefe Python 3.12..."
+echo "[2/7] Pruefe Python 3.12..."
 python3.12 --version
 echo "OK: Python 3.12 verfuegbar (nativ)"
 
 # -----------------------------------------------------------------------------
-# 4. Android SDK
+# 3. Android SDK
 # -----------------------------------------------------------------------------
-echo "[4/8] Installiere Android SDK..."
+echo "[3/7] Installiere Android SDK..."
 ANDROID_SDK="$HOME/android-sdk"
 mkdir -p "$ANDROID_SDK/cmdline-tools"
 
@@ -65,8 +56,9 @@ if [ ! -f "$ANDROID_SDK/cmdline-tools/latest/bin/sdkmanager" ]; then
   rm tools.zip
 fi
 
-# Env-Variablen setzen
-cat >> "$HOME/.bashrc" << 'ENVEOF'
+# Env-Variablen setzen (idempotent)
+if ! grep -q 'ANDROID_SDK_ROOT' "$HOME/.bashrc" 2>/dev/null; then
+  cat >> "$HOME/.bashrc" << 'ENVEOF'
 
 # Android SDK
 export ANDROID_SDK_ROOT=$HOME/android-sdk
@@ -74,11 +66,12 @@ export PATH=$PATH:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin
 export PATH=$PATH:$ANDROID_SDK_ROOT/platform-tools
 export PATH=$PATH:$ANDROID_SDK_ROOT/emulator
 ENVEOF
+fi
 
 export ANDROID_SDK_ROOT="$ANDROID_SDK"
 export PATH="$PATH:$ANDROID_SDK/cmdline-tools/latest/bin:$ANDROID_SDK/platform-tools:$ANDROID_SDK/emulator"
 
-echo "[4/8] Installiere SDK-Packages..."
+echo "[3/7] Installiere SDK-Packages (ca. 3 GB Download)..."
 yes | sdkmanager --licenses > /dev/null 2>&1 || true
 sdkmanager \
   "emulator" \
@@ -88,9 +81,9 @@ sdkmanager \
 echo "OK: Android SDK installiert"
 
 # -----------------------------------------------------------------------------
-# 5. 3 AVDs erstellen
+# 4. 3 AVDs erstellen
 # -----------------------------------------------------------------------------
-echo "[5/8] Erstelle 3 AVDs..."
+echo "[4/7] Erstelle 3 AVDs..."
 for i in 1 2 3; do
   AVD_NAME="lastwar-bot-${i}"
   if ! avdmanager list avd 2>/dev/null | grep -q "$AVD_NAME"; then
@@ -109,31 +102,33 @@ done
 for i in 1 2 3; do
   AVD_CONFIG="$HOME/.android/avd/lastwar-bot-${i}.avd/config.ini"
   if [ -f "$AVD_CONFIG" ]; then
-    # Entferne alte Eintraege
     sed -i '/^hw.ramSize=/d' "$AVD_CONFIG"
     sed -i '/^disk.dataPartition.size=/d' "$AVD_CONFIG"
     sed -i '/^hw.lcd.density=/d' "$AVD_CONFIG"
     sed -i '/^hw.lcd.width=/d' "$AVD_CONFIG"
     sed -i '/^hw.lcd.height=/d' "$AVD_CONFIG"
-    # Setze optimale Werte
+    sed -i '/^hw.cpu.ncore=/d' "$AVD_CONFIG"
     echo "hw.ramSize=2048" >> "$AVD_CONFIG"
     echo "disk.dataPartition.size=8G" >> "$AVD_CONFIG"
     echo "hw.lcd.density=240" >> "$AVD_CONFIG"
     echo "hw.lcd.width=1080" >> "$AVD_CONFIG"
     echo "hw.lcd.height=1920" >> "$AVD_CONFIG"
+    echo "hw.cpu.ncore=2" >> "$AVD_CONFIG"
   fi
 done
-echo "OK: AVDs konfiguriert (2048 MB RAM, 1080x1920)"
+echo "OK: AVDs konfiguriert (2048 MB RAM, 2 cores, 1080x1920)"
 
 # -----------------------------------------------------------------------------
-# 6. Bot-Verzeichnis + Python venv
+# 5. Bot-Verzeichnis + Python venv
 # -----------------------------------------------------------------------------
-echo "[6/8] Erstelle Bot-Umgebung..."
+echo "[5/7] Erstelle Bot-Umgebung..."
 BOT_DIR="$HOME/lastwar-bot"
 mkdir -p "$BOT_DIR"/{templates,screenshots,logs}
 cd "$BOT_DIR"
 
-python3.12 -m venv .venv
+if [ ! -d "$BOT_DIR/.venv" ]; then
+  python3.12 -m venv .venv
+fi
 source .venv/bin/activate
 
 pip install --quiet --upgrade pip
@@ -150,14 +145,13 @@ pip install --quiet \
 echo "OK: Python venv + Dependencies installiert"
 
 # -----------------------------------------------------------------------------
-# 7. Systemd Services
+# 6. Systemd Services
 # -----------------------------------------------------------------------------
-echo "[7/8] Erstelle Systemd-Services..."
+echo "[6/7] Erstelle Systemd-Services..."
 
-# Emulator-Service
 cat > /etc/systemd/system/lastwar-emulators.service << EOF
 [Unit]
-Description=Last War Android Emulators (3 instances)
+Description=Last War Android Emulators (3 instances, software accel)
 After=network.target
 
 [Service]
@@ -174,7 +168,6 @@ RestartSec=30
 WantedBy=multi-user.target
 EOF
 
-# Celery Worker Service
 cat > /etc/systemd/system/lastwar-celery.service << EOF
 [Unit]
 Description=Last War Bot Celery Worker
@@ -193,7 +186,6 @@ RestartSec=10
 WantedBy=multi-user.target
 EOF
 
-# Celery Beat Service
 cat > /etc/systemd/system/lastwar-beat.service << EOF
 [Unit]
 Description=Last War Bot Celery Beat Scheduler
@@ -216,9 +208,9 @@ systemctl daemon-reload
 echo "OK: Systemd-Services registriert (noch nicht aktiviert)"
 
 # -----------------------------------------------------------------------------
-# 8. Firewall
+# 7. Firewall
 # -----------------------------------------------------------------------------
-echo "[8/8] Konfiguriere Firewall..."
+echo "[7/7] Konfiguriere Firewall..."
 if command -v ufw &>/dev/null; then
   ufw allow ssh
   ufw --force enable
@@ -230,17 +222,18 @@ echo "======================================"
 echo "=== Setup abgeschlossen ==="
 echo "======================================"
 echo ""
-echo "Server: $(hostname) ($(curl -s ifconfig.me))"
-echo "KVM:    $(kvm-ok 2>&1 | head -1)"
-echo "Python: $(python3.12 --version)"
-echo "Redis:  $(redis-cli ping)"
+echo "Server:   $(hostname) ($(curl -s ifconfig.me))"
+echo "Mode:     Software Emulation (kein KVM)"
+echo "Python:   $(python3.12 --version)"
+echo "Redis:    $(redis-cli ping)"
+echo "SDK:      $ANDROID_SDK_ROOT"
+echo "AVDs:     $(avdmanager list avd 2>/dev/null | grep 'Name:' | wc -l)"
 echo ""
 echo "Naechste Schritte:"
 echo "  1. source ~/.bashrc"
-echo "  2. cd $BOT_DIR && git clone ... ."
-echo "  3. bash scripts/start_emulators.sh"
-echo "  4. Last War APK installieren:"
+echo "  2. bash scripts/start_emulators.sh"
+echo "  3. Last War APK installieren:"
 echo "     adb -s emulator-5554 install lastwar.apk"
-echo "  5. Accounts manuell einrichten (scrcpy)"
-echo "  6. systemctl enable --now lastwar-emulators"
-echo "  7. systemctl enable --now lastwar-celery lastwar-beat"
+echo "  4. Accounts manuell einrichten (scrcpy)"
+echo "  5. systemctl enable --now lastwar-emulators"
+echo "  6. systemctl enable --now lastwar-celery lastwar-beat"

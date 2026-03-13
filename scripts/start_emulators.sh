@@ -1,6 +1,8 @@
 #!/bin/bash
 # =============================================================================
-# start_emulators.sh -- Alle 3 AVDs headless starten + warten bis bereit
+# start_emulators.sh -- Alle 3 AVDs headless starten (Software Emulation)
+# Kein KVM -- verwendet -accel off + swiftshader_indirect
+# Boot-Timeout: 5 Min (laenger wegen Software-Emulation)
 # =============================================================================
 set -euo pipefail
 
@@ -14,19 +16,19 @@ declare -A AVD_PORTS=(
   [lastwar-bot-3]=5558
 )
 
-echo "$(date): Starte Last War Emulatoren..."
+echo "$(date): Starte Last War Emulatoren (Software Emulation)..."
 
 for AVD_NAME in "${!AVD_PORTS[@]}"; do
   PORT="${AVD_PORTS[$AVD_NAME]}"
   SERIAL="emulator-${PORT}"
 
   # Bereits laufend?
-  if adb devices | grep -q "$SERIAL"; then
+  if adb devices 2>/dev/null | grep -q "$SERIAL"; then
     echo "OK: $AVD_NAME (Port $PORT) laeuft bereits"
     continue
   fi
 
-  echo "  Starte $AVD_NAME auf Port $PORT..."
+  echo "  Starte $AVD_NAME auf Port $PORT (no-accel)..."
   nohup emulator \
     -avd "$AVD_NAME" \
     -port "$PORT" \
@@ -34,28 +36,34 @@ for AVD_NAME in "${!AVD_PORTS[@]}"; do
     -no-window \
     -no-snapshot \
     -no-boot-anim \
+    -accel off \
     -gpu swiftshader_indirect \
     -memory 2048 \
+    -cores 2 \
     > "/var/log/emulator-${AVD_NAME}.log" 2>&1 &
 
   echo "  PID: $!"
+  sleep 5
 done
 
-echo "Warte auf Boot aller Emulatoren..."
+echo "Warte auf Boot aller Emulatoren (Software-Emulation, kann 3-5 Min dauern)..."
 
 for AVD_NAME in "${!AVD_PORTS[@]}"; do
   PORT="${AVD_PORTS[$AVD_NAME]}"
   SERIAL="emulator-${PORT}"
-  TIMEOUT=180
+  TIMEOUT=300
   ELAPSED=0
 
   until adb -s "$SERIAL" shell getprop sys.boot_completed 2>/dev/null | grep -q "1"; do
-    sleep 5
-    ELAPSED=$((ELAPSED + 5))
+    sleep 10
+    ELAPSED=$((ELAPSED + 10))
     if [ $ELAPSED -ge $TIMEOUT ]; then
       echo "FEHLER: $AVD_NAME Timeout nach ${TIMEOUT}s"
+      echo "  Log: /var/log/emulator-${AVD_NAME}.log"
+      tail -20 "/var/log/emulator-${AVD_NAME}.log" 2>/dev/null
       exit 1
     fi
+    echo "  Warte auf $AVD_NAME... (${ELAPSED}s / ${TIMEOUT}s)"
   done
 
   echo "OK: $AVD_NAME bereit (${ELAPSED}s)"
