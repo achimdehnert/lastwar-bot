@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+
+# Screenshots (can be large)
+screenshots/*.png
+
+# Logs
+logs/*.log
+
+# Celery
+celerybeat-schedule
+celerybeat-schedule.db
+
+# APK files
+*.apk
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+*:Zone.Identifier
