@@ -5,43 +5,56 @@ Zeitgesteuerte Ausfuehrung aller 3 Bot-Instanzen
 from __future__ import annotations
 
 import logging
+import os
+import subprocess
+
 from celery import Celery
 from celery.schedules import crontab
+from dotenv import load_dotenv
 
+from bot import setup_logging
 from bot.core import BotConfig, LastWarBot
+
+load_dotenv()
+setup_logging()
 
 logger = logging.getLogger(__name__)
 
+_REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+_TIMEZONE = os.getenv("CELERY_TIMEZONE", "Europe/Berlin")
+
 app = Celery(
     "lastwar_bot",
-    broker="redis://localhost:6379/0",
-    backend="redis://localhost:6379/0",
+    broker=_REDIS_URL,
+    backend=_REDIS_URL,
 )
 
 app.conf.update(
     task_serializer="json",
     result_expires=3600,
-    timezone="Europe/Berlin",
+    timezone=_TIMEZONE,
     enable_utc=True,
 )
+
 
 # -- Bot-Konfigurationen ------------------------------------------------------
 
 BOT_CONFIGS = [
-    BotConfig(device_serial="emulator-5554", bot_id=1),
-    BotConfig(device_serial="emulator-5556", bot_id=2),
-    BotConfig(device_serial="emulator-5558", bot_id=3),
+    BotConfig(device_serial="emulator-5554", bot_id=1, account_name="JuniorCat"),
+    BotConfig(device_serial="emulator-5556", bot_id=2, account_name=""),
+    BotConfig(device_serial="emulator-5558", bot_id=3, account_name=""),
 ]
 
 # -- Tasks ---------------------------------------------------------------------
+
 
 @app.task(bind=True, max_retries=2, default_retry_delay=60)
 def run_bot_daily(self, bot_id: int) -> dict:
     """Daily Routine fuer einen Bot."""
     config = BOT_CONFIGS[bot_id - 1]
     try:
-        bot = LastWarBot(config)
-        bot.run_daily_routine()
+        with LastWarBot(config) as bot:
+            bot.run_daily_routine()
         return {"bot_id": bot_id, "status": "success"}
     except Exception as exc:
         logger.error("Bot %d: Fehler -- %s", bot_id, exc)
@@ -50,15 +63,41 @@ def run_bot_daily(self, bot_id: int) -> dict:
 
 @app.task
 def run_all_bots_daily() -> None:
-    """Startet alle 3 Bots parallel."""
-    for bot_id in [1, 2, 3]:
-        run_bot_daily.delay(bot_id)
+    """Startet alle aktiven Bots (account_name gesetzt) parallel."""
+    for config in BOT_CONFIGS:
+        if config.account_name:
+            run_bot_daily.delay(config.bot_id)
+        else:
+            logger.info(
+                "Bot %d: uebersprungen (kein account_name konfiguriert)",
+                config.bot_id,
+            )
+
+
+@app.task
+def validate_all_templates() -> dict:
+    """Pre-flight: prueft ob alle Templates fuer alle aktiven Bots vorhanden sind."""
+    results = {}
+    for config in BOT_CONFIGS:
+        if not config.account_name:
+            results[f"bot_{config.bot_id}"] = {
+                "ok": None, "missing": [], "skipped": True
+            }
+            continue
+        bot = LastWarBot(config)
+        missing = bot.validate_templates()
+        results[f"bot_{config.bot_id}"] = {
+            "ok": len(missing) == 0,
+            "missing": missing,
+            "skipped": False,
+        }
+    logger.info("Template-Validierung: %s", results)
+    return results
 
 
 @app.task
 def health_check() -> dict:
     """Prueft ADB-Verbindung aller 3 Emulatoren."""
-    import subprocess
     result = subprocess.run(["adb", "devices"], capture_output=True, text=True)
     devices = [
         line.split("\t")[0]

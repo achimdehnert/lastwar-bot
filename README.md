@@ -22,29 +22,67 @@ Celery Beat (3x taeglich: 06:00, 12:30, 20:00)
             +-- Bot 1 -> emulator-5554 (AVD: lastwar-bot-1)
             +-- Bot 2 -> emulator-5556 (AVD: lastwar-bot-2)
             +-- Bot 3 -> emulator-5558 (AVD: lastwar-bot-3)
+
+Logs: logs/lastwar-bot.log (rotierend, 5x5 MB)
 ```
 
-## Schnellstart
+## Erstinstallation (Server)
 
 ```bash
-# 1. Server einrichten (einmalig)
+# 1. Repo klonen
+git clone https://github.com/<user>/lastwar-bot.git ~/lastwar-bot
+cd ~/lastwar-bot
+
+# 2. Server einrichten (Android SDK, AVDs, venv, Systemd)
 sudo bash scripts/00_setup_server.sh
 
-# 2. Emulatoren starten
+# 3. .env anpassen (Redis-URL etc. -- Defaults funktionieren fuer lokales Redis)
+nano .env
+
+# 4. Emulatoren starten
 bash scripts/start_emulators.sh
 
-# 3. Last War APK installieren (APK muss manuell beschafft werden)
+# 5. Last War APK installieren (APK muss manuell beschafft werden)
 adb -s emulator-5554 install lastwar.apk
 adb -s emulator-5556 install lastwar.apk
 adb -s emulator-5558 install lastwar.apk
 
-# 4. Accounts manuell einrichten (einmalig per scrcpy)
+# 6. Accounts manuell einrichten (einmalig per scrcpy)
 scrcpy -s emulator-5554
 
-# 5. Bot starten
-source .venv/bin/activate
-celery -A bot.tasks worker --loglevel=info &
-celery -A bot.tasks beat --loglevel=info &
+# 7. Services aktivieren
+systemctl enable --now lastwar-emulators lastwar-celery lastwar-beat
+```
+
+## Konfiguration (.env)
+
+```bash
+cp .env.example .env
+# Werte anpassen:
+#   REDIS_URL        -- Standard: redis://localhost:6379/0
+#   CELERY_TIMEZONE  -- Standard: Europe/Berlin
+#   BOT_MATCH_THRESHOLD    -- Standard: 0.85
+#   BOT_ACTION_DELAY       -- Standard: 1.5
+#   BOT_SCREENSHOT_MAX_FILES -- Standard: 50
+```
+
+## Code-Update auf Server deployen
+
+```bash
+# Von der lokalen Maschine:
+bash scripts/deploy.sh [SERVER_IP]
+
+# Fuehrt aus: git pull + pip install + systemctl restart + health check
+```
+
+## Health Check & Auto-Restart
+
+```bash
+# Status pruefen
+bash scripts/health_check.sh
+
+# Status pruefen + ausgefallene Dienste automatisch neu starten
+bash scripts/health_check.sh --restart
 ```
 
 ## Templates erstellen
@@ -57,10 +95,23 @@ adb -s emulator-5554 exec-out screencap -p > screen.png
 # z.B. templates/btn_collect_all.png
 ```
 
+## Logs
+
+```bash
+# Bot-Log (alle 3 Instanzen)
+tail -f logs/lastwar-bot.log
+
+# Celery Worker
+tail -f logs/celery-worker.log
+
+# Emulator (z.B. Bot 1)
+tail -f /var/log/emulator-lastwar-bot-1.log
+```
+
 ## Phasenplan
 
 - **Phase 0** -- Server-Provisioning (done)
-- **Phase 1** -- Emulator-Management + Systemd
-- **Phase 2** -- Bot-Framework
+- **Phase 1** -- Emulator-Management + Systemd (done)
+- **Phase 2** -- Bot-Framework (done)
 - **Phase 3** -- Templates & Kalibrierung
 - **Phase 4** -- Monitoring & Alerting

@@ -17,7 +17,7 @@ echo "=== Last War Bot Server Setup === $(date)"
 # -----------------------------------------------------------------------------
 # 1. System-Dependencies
 # -----------------------------------------------------------------------------
-echo "[1/7] Installiere System-Dependencies..."
+echo "[1/8] Installiere System-Dependencies..."
 apt-get update -qq
 apt-get install -y \
   openjdk-21-jdk-headless \
@@ -37,14 +37,14 @@ echo "OK: System-Dependencies + Redis installiert"
 # -----------------------------------------------------------------------------
 # 2. Python 3.12 (nativ auf Ubuntu 24.04)
 # -----------------------------------------------------------------------------
-echo "[2/7] Pruefe Python 3.12..."
+echo "[2/8] Pruefe Python 3.12..."
 python3.12 --version
 echo "OK: Python 3.12 verfuegbar (nativ)"
 
 # -----------------------------------------------------------------------------
 # 3. Android SDK
 # -----------------------------------------------------------------------------
-echo "[3/7] Installiere Android SDK..."
+echo "[3/8] Installiere Android SDK..."
 ANDROID_SDK="$HOME/android-sdk"
 mkdir -p "$ANDROID_SDK/cmdline-tools"
 
@@ -71,7 +71,7 @@ fi
 export ANDROID_SDK_ROOT="$ANDROID_SDK"
 export PATH="$PATH:$ANDROID_SDK/cmdline-tools/latest/bin:$ANDROID_SDK/platform-tools:$ANDROID_SDK/emulator"
 
-echo "[3/7] Installiere SDK-Packages (ca. 3 GB Download)..."
+echo "[3/8] Installiere SDK-Packages (ca. 3 GB Download)..."
 yes | sdkmanager --licenses > /dev/null 2>&1 || true
 sdkmanager \
   "emulator" \
@@ -83,7 +83,7 @@ echo "OK: Android SDK installiert"
 # -----------------------------------------------------------------------------
 # 4. 3 AVDs erstellen
 # -----------------------------------------------------------------------------
-echo "[4/7] Erstelle 3 AVDs..."
+echo "[4/8] Erstelle 3 AVDs..."
 for i in 1 2 3; do
   AVD_NAME="lastwar-bot-${i}"
   if ! avdmanager list avd 2>/dev/null | grep -q "$AVD_NAME"; then
@@ -121,7 +121,7 @@ echo "OK: AVDs konfiguriert (2048 MB RAM, 2 cores, 1080x1920)"
 # -----------------------------------------------------------------------------
 # 5. Bot-Verzeichnis + Python venv
 # -----------------------------------------------------------------------------
-echo "[5/7] Erstelle Bot-Umgebung..."
+echo "[5/8] Erstelle Bot-Umgebung..."
 BOT_DIR="$HOME/lastwar-bot"
 mkdir -p "$BOT_DIR"/{templates,screenshots,logs}
 cd "$BOT_DIR"
@@ -132,22 +132,26 @@ fi
 source .venv/bin/activate
 
 pip install --quiet --upgrade pip
-pip install --quiet \
-  uiautomator2 \
-  adbutils \
-  opencv-python-headless \
-  pytesseract \
-  Pillow \
-  celery[redis] \
-  redis \
-  python-dotenv
+pip install --quiet -r "$BOT_DIR/requirements.txt"
+
+# .env aus Vorlage erstellen falls noch nicht vorhanden
+if [ ! -f "$BOT_DIR/.env" ]; then
+  cp "$BOT_DIR/.env.example" "$BOT_DIR/.env"
+  echo "OK: .env aus .env.example erstellt -- bitte anpassen!"
+else
+  echo "OK: .env bereits vorhanden"
+fi
+
+# Scripts ausfuehrbar machen
+chmod +x "$BOT_DIR/scripts/"*.sh
+echo "OK: Scripts ausfuehrbar gemacht"
 
 echo "OK: Python venv + Dependencies installiert"
 
 # -----------------------------------------------------------------------------
 # 6. Systemd Services
 # -----------------------------------------------------------------------------
-echo "[6/7] Erstelle Systemd-Services..."
+echo "[6/8] Erstelle Systemd-Services..."
 
 cat > /etc/systemd/system/lastwar-emulators.service << EOF
 [Unit]
@@ -177,6 +181,7 @@ After=redis-server.service lastwar-emulators.service
 Type=simple
 User=root
 WorkingDirectory=$BOT_DIR
+EnvironmentFile=$BOT_DIR/.env
 Environment=PATH=$BOT_DIR/.venv/bin:$HOME/android-sdk/platform-tools:/usr/local/bin:/usr/bin:/bin
 ExecStart=$BOT_DIR/.venv/bin/celery -A bot.tasks worker --loglevel=info --logfile=$BOT_DIR/logs/celery-worker.log
 Restart=on-failure
@@ -195,6 +200,7 @@ After=lastwar-celery.service
 Type=simple
 User=root
 WorkingDirectory=$BOT_DIR
+EnvironmentFile=$BOT_DIR/.env
 Environment=PATH=$BOT_DIR/.venv/bin:$HOME/android-sdk/platform-tools:/usr/local/bin:/usr/bin:/bin
 ExecStart=$BOT_DIR/.venv/bin/celery -A bot.tasks beat --loglevel=info --logfile=$BOT_DIR/logs/celery-beat.log
 Restart=on-failure
@@ -208,9 +214,18 @@ systemctl daemon-reload
 echo "OK: Systemd-Services registriert (noch nicht aktiviert)"
 
 # -----------------------------------------------------------------------------
-# 7. Firewall
+# 7. Cron-basiertes Monitoring (Auto-Restart alle 5 Minuten)
 # -----------------------------------------------------------------------------
-echo "[7/7] Konfiguriere Firewall..."
+echo "[7/8] Richte Monitoring-Cron ein..."
+CRON_JOB="*/5 * * * * BOT_DIR=${BOT_DIR} bash ${BOT_DIR}/scripts/health_check.sh --restart >> ${BOT_DIR}/logs/health_check.log 2>&1"
+# Idempotent: nur hinzufuegen wenn noch nicht vorhanden
+( crontab -l 2>/dev/null | grep -v 'health_check.sh'; echo "$CRON_JOB" ) | crontab -
+echo "OK: Cron eingerichtet (health_check --restart alle 5 Min)"
+
+# -----------------------------------------------------------------------------
+# 8. Firewall
+# -----------------------------------------------------------------------------
+echo "[8/8] Konfiguriere Firewall..."
 if command -v ufw &>/dev/null; then
   ufw allow ssh
   ufw --force enable

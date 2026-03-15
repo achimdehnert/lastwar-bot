@@ -9,17 +9,15 @@ set -euo pipefail
 export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-$HOME/android-sdk}"
 export PATH="$PATH:$ANDROID_SDK_ROOT/emulator:$ANDROID_SDK_ROOT/platform-tools"
 
-# AVD -> ADB-Port Mapping
-declare -A AVD_PORTS=(
-  [lastwar-bot-1]=5554
-  [lastwar-bot-2]=5556
-  [lastwar-bot-3]=5558
-)
+# AVD -> ADB-Port Mapping (geordnet: Index 0=bot1/5554, 1=bot2/5556, 2=bot3/5558)
+AVD_NAMES=("lastwar-bot-1" "lastwar-bot-2" "lastwar-bot-3")
+AVD_PORTS=(5554 5556 5558)
 
 echo "$(date): Starte Last War Emulatoren (Software Emulation)..."
 
-for AVD_NAME in "${!AVD_PORTS[@]}"; do
-  PORT="${AVD_PORTS[$AVD_NAME]}"
+for i in 0 1 2; do
+  AVD_NAME="${AVD_NAMES[$i]}"
+  PORT="${AVD_PORTS[$i]}"
   SERIAL="emulator-${PORT}"
 
   # Bereits laufend?
@@ -48,8 +46,9 @@ done
 
 echo "Warte auf Boot aller Emulatoren (Software-Emulation, kann 3-5 Min dauern)..."
 
-for AVD_NAME in "${!AVD_PORTS[@]}"; do
-  PORT="${AVD_PORTS[$AVD_NAME]}"
+for i in 0 1 2; do
+  AVD_NAME="${AVD_NAMES[$i]}"
+  PORT="${AVD_PORTS[$i]}"
   SERIAL="emulator-${PORT}"
   TIMEOUT=300
   ELAPSED=0
