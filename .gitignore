@@ -29,3 +29,6 @@ celerybeat-schedule.db
 .DS_Store
 Thumbs.db
 *:Zone.Identifier
+
+# IDE agent workflows (symlinked, not repo-specific)
+.windsurf/
