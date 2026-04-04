@@ -16,10 +16,10 @@ echo ""
 
 FAILED=0
 
-AVD_NAMES=("lastwar-bot-1" "lastwar-bot-2" "lastwar-bot-3")
-AVD_PORTS=(5554 5556 5558)
+AVD_NAMES=("lastwar-bot-2" "lastwar-bot-3")
+AVD_PORTS=(5556 5558)
 
-for i in 0 1 2; do
+for i in 0 1; do
   AVD="${AVD_NAMES[$i]}"
   PORT="${AVD_PORTS[$i]}"
   SERIAL="emulator-${PORT}"

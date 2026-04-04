@@ -39,12 +39,14 @@ app.conf.update(
 
 
 # -- Bot-Konfigurationen ------------------------------------------------------
+# Netcup vServer 8GB RAM -> max 2 Emulatoren stabil (je 1.5GB + System-Overhead)
 
 BOT_CONFIGS = [
-    BotConfig(device_serial="emulator-5554", bot_id=1, account_name="JuniorCat"),
-    BotConfig(device_serial="emulator-5556", bot_id=2, account_name=""),
-    BotConfig(device_serial="emulator-5558", bot_id=3, account_name=""),
+    BotConfig(device_serial="emulator-5556", bot_id=1, account_name="JuniorCat"),
+    BotConfig(device_serial="emulator-5558", bot_id=2, account_name=""),
 ]
+
+_BOT_MAP: dict[int, BotConfig] = {c.bot_id: c for c in BOT_CONFIGS}
 
 # -- Tasks ---------------------------------------------------------------------
 
@@ -52,7 +54,7 @@ BOT_CONFIGS = [
 @app.task(bind=True, max_retries=2, default_retry_delay=60)
 def run_bot_daily(self, bot_id: int) -> dict:
     """Daily Routine fuer einen Bot."""
-    config = BOT_CONFIGS[bot_id - 1]
+    config = _BOT_MAP[bot_id]
     metrics = RunMetrics(bot_id=bot_id)
     try:
         with LastWarBot(config) as bot:
