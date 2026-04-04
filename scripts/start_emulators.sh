@@ -36,8 +36,8 @@ for i in 0 1 2; do
     -no-boot-anim \
     -accel off \
     -gpu swiftshader_indirect \
-    -memory 2048 \
-    -cores 2 \
+    -memory 1536 \
+    -cores 1 \
     > "/var/log/emulator-${AVD_NAME}.log" 2>&1 &
 
   echo "  PID: $!"

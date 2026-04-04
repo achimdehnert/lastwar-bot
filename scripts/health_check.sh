@@ -38,7 +38,7 @@ for i in 0 1 2; do
         -port "$PORT" \
         -no-audio -no-window -no-snapshot -no-boot-anim \
         -accel off -gpu swiftshader_indirect \
-        -memory 2048 -cores 2 \
+        -memory 1536 -cores 1 \
         > "/var/log/emulator-${AVD}.log" 2>&1 &
       echo "  --> PID: $! (Boot kann 3-5 Min dauern)"
     fi

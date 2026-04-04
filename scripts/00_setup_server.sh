@@ -109,15 +109,15 @@ for i in 1 2 3; do
     sed -i '/^hw.lcd.width=/d' "$AVD_CONFIG"
     sed -i '/^hw.lcd.height=/d' "$AVD_CONFIG"
     sed -i '/^hw.cpu.ncore=/d' "$AVD_CONFIG"
-    echo "hw.ramSize=2048" >> "$AVD_CONFIG"
-    echo "disk.dataPartition.size=8G" >> "$AVD_CONFIG"
+    echo "hw.ramSize=1536" >> "$AVD_CONFIG"
+    echo "disk.dataPartition.size=4G" >> "$AVD_CONFIG"
     echo "hw.lcd.density=240" >> "$AVD_CONFIG"
     echo "hw.lcd.width=1080" >> "$AVD_CONFIG"
     echo "hw.lcd.height=1920" >> "$AVD_CONFIG"
-    echo "hw.cpu.ncore=2" >> "$AVD_CONFIG"
+    echo "hw.cpu.ncore=1" >> "$AVD_CONFIG"
   fi
 done
-echo "OK: AVDs konfiguriert (2048 MB RAM, 2 cores, 1080x1920)"
+echo "OK: AVDs konfiguriert (1536 MB RAM, 1 core, 1080x1920)"
 
 # -----------------------------------------------------------------------------
 # 5. Bot-Verzeichnis + Python venv
