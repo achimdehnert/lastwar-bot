@@ -53,7 +53,9 @@ for i in 0 1 2; do
   TIMEOUT=300
   ELAPSED=0
 
-  until adb -s "$SERIAL" shell getprop sys.boot_completed 2>/dev/null | grep -q "1"; do
+  # Android 34 + Software-Emulation setzt sys.boot_completed nicht zuverlaessig.
+  # Pruefe stattdessen ob bootanim gestoppt ist (= UI bereit).
+  until adb -s "$SERIAL" shell getprop init.svc.bootanim 2>/dev/null | grep -q "stopped"; do
     sleep 10
     ELAPSED=$((ELAPSED + 10))
     if [ $ELAPSED -ge $TIMEOUT ]; then

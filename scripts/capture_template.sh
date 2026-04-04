@@ -34,7 +34,7 @@ SCREENSHOTS_DIR="$BOT_DIR/screenshots"
 mkdir -p "$TEMPLATES_DIR" "$SCREENSHOTS_DIR"
 
 # Verbindung pruefen
-if ! adb -s "$SERIAL" shell getprop sys.boot_completed 2>/dev/null | grep -q "1"; then
+if ! adb -s "$SERIAL" shell getprop init.svc.bootanim 2>/dev/null | grep -q "stopped"; then
   echo "FEHLER: Emulator $SERIAL nicht erreichbar"
   exit 1
 fi

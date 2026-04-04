@@ -25,7 +25,7 @@ for i in 0 1 2; do
   SERIAL="emulator-${PORT}"
   BOT_NUM=$((i + 1))
 
-  if adb -s "$SERIAL" shell getprop sys.boot_completed 2>/dev/null | grep -q "1"; then
+  if adb -s "$SERIAL" shell getprop init.svc.bootanim 2>/dev/null | grep -q "stopped"; then
     UPTIME=$(adb -s "$SERIAL" shell uptime 2>/dev/null | head -1)
     echo "OK: Bot $BOT_NUM ($SERIAL): RUNNING -- $UPTIME"
   else
