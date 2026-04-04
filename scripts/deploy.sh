@@ -6,7 +6,7 @@
 # =============================================================================
 set -euo pipefail
 
-SERVER_IP="${1:-204.168.149.6}"
+SERVER_IP="${1:-152.53.142.4}"
 SERVER_USER="${SERVER_USER:-root}"
 BOT_DIR="${BOT_DIR:-/root/lastwar-bot}"
 BRANCH="${BRANCH:-main}"

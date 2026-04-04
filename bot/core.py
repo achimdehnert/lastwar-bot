@@ -4,22 +4,64 @@ Stack: ADB + OpenCV Template Matching + Tesseract OCR
 """
 from __future__ import annotations
 
+import functools
 import logging
 import os
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TypeVar
 
 import cv2
 import numpy as np
 import pytesseract
-from PIL import Image
 import uiautomator2 as u2
+from PIL import Image
 
 logger = logging.getLogger(__name__)
 
 _TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
 _SCREENSHOTS_DIR = Path(__file__).parent.parent / "screenshots"
+
+T = TypeVar("T")
+
+
+def _adb_retry(
+    retries: int = 3, delay: float = 5.0, backoff: float = 2.0,
+) -> Callable:
+    """Decorator: ADB-Operationen mit exponentiellem Backoff wiederholen."""
+    def decorator(fn: Callable[..., T]) -> Callable[..., T]:
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs) -> T:
+            last_exc: Exception | None = None
+            wait = delay
+            for attempt in range(1, retries + 1):
+                try:
+                    return fn(*args, **kwargs)
+                except (u2.exceptions.UiAutomationNotConnectedError,
+                        ConnectionError, OSError) as exc:
+                    last_exc = exc
+                    logger.warning(
+                        "ADB retry %d/%d fuer %s: %s (warte %.1fs)",
+                        attempt, retries, fn.__name__, exc, wait,
+                    )
+                    time.sleep(wait)
+                    wait *= backoff
+            raise RuntimeError(
+                f"{fn.__name__} fehlgeschlagen nach {retries} Versuchen"
+            ) from last_exc
+        return wrapper
+    return decorator
+
+
+def _env_float(key: str, default: float) -> float:
+    """Lazy env read -- sicher fuer Tests und Reloads."""
+    return float(os.getenv(key, str(default)))
+
+
+def _env_int(key: str, default: int) -> int:
+    return int(os.getenv(key, str(default)))
 
 
 @dataclass
@@ -30,9 +72,15 @@ class BotConfig:
     package: str = "com.fun.lastwar.gp"
     templates_dir: Path = field(default_factory=lambda: _TEMPLATES_DIR)
     screenshot_dir: Path = field(default_factory=lambda: _SCREENSHOTS_DIR)
-    match_threshold: float = float(os.getenv("BOT_MATCH_THRESHOLD", "0.85"))
-    action_delay: float = float(os.getenv("BOT_ACTION_DELAY", "1.5"))
-    screenshot_max_files: int = int(os.getenv("BOT_SCREENSHOT_MAX_FILES", "50"))
+    match_threshold: float = field(
+        default_factory=lambda: _env_float("BOT_MATCH_THRESHOLD", 0.85),
+    )
+    action_delay: float = field(
+        default_factory=lambda: _env_float("BOT_ACTION_DELAY", 1.5),
+    )
+    screenshot_max_files: int = field(
+        default_factory=lambda: _env_int("BOT_SCREENSHOT_MAX_FILES", 50),
+    )
 
 
 @dataclass
@@ -68,6 +116,7 @@ class LastWarBot:
 
     # -- Verbindung ----------------------------------------------------------------
 
+    @_adb_retry(retries=3, delay=5.0)
     def _connect(self) -> None:
         logger.info(
             "Bot %d: Verbinde mit %s", self.config.bot_id, self.config.device_serial
@@ -79,6 +128,20 @@ class LastWarBot:
             "Bot %d: Verbunden -- %s", self.config.bot_id, info.get("model", "unknown")
         )
 
+    def is_connected(self) -> bool:
+        """Prueft ob ADB-Verbindung noch aktiv ist."""
+        try:
+            _ = self.d.device_info
+            return True
+        except Exception:
+            return False
+
+    def reconnect(self) -> None:
+        """Verbindung neu aufbauen nach Verbindungsabbruch."""
+        logger.warning("Bot %d: Reconnect...", self.config.bot_id)
+        self._connect()
+
+    @_adb_retry(retries=2, delay=10.0)
     def ensure_game_running(self, boot_timeout: int = 60) -> None:
         """Spiel starten und warten bis Hauptscreen geladen ist."""
         current = self.d.app_current()
@@ -380,12 +443,35 @@ class LastWarBot:
                         self.config.bot_id, len(self.REQUIRED_TEMPLATES))
         return missing
 
+    def _ensure_home_screen(self, max_attempts: int = 3) -> bool:
+        """Recovery: sicherstellen dass wir auf dem Hauptscreen sind."""
+        for _attempt in range(max_attempts):
+            if self.find_template("btn_home").found:
+                return True
+            self.back()
+            time.sleep(1)
+        # Letzter Versuch: App neustarten
+        try:
+            self.d.app_stop(self.config.package)
+            time.sleep(2)
+            self.ensure_game_running(boot_timeout=60)
+            return True
+        except Exception as exc:
+            logger.error(
+                "Bot %d: Home-Screen Recovery fehlgeschlagen: %s",
+                self.config.bot_id, exc,
+            )
+            return False
+
     # -- Komplette Daily Routine ---------------------------------------------------
 
-    def run_daily_routine(self) -> None:
+    def run_daily_routine(self) -> dict:
         """
         Vollstaendige Tages-Routine.
         Entspricht BlueStacks Makro-Sequenz.
+
+        Returns:
+            dict mit Ergebnis pro Step (ok/fail/skipped)
         """
         logger.info("Bot %d: === Starte Daily Routine ===", self.config.bot_id)
         missing = self.validate_templates()
@@ -393,6 +479,9 @@ class LastWarBot:
             raise RuntimeError(
                 f"Bot {self.config.bot_id}: Fehlende Templates: {missing}"
             )
+
+        if not self.is_connected():
+            self.reconnect()
         self.ensure_game_running()
 
         steps = [
@@ -404,15 +493,40 @@ class LastWarBot:
             ("Zombie-Jagd", lambda: self.hunt_zombies(stamina_to_spend=80)),
         ]
 
+        results: dict[str, str] = {}
+        consecutive_failures = 0
+
         for step_name, step_fn in steps:
+            if consecutive_failures >= 3:
+                logger.error(
+                    "Bot %d: 3 Fehler hintereinander -- breche ab",
+                    self.config.bot_id,
+                )
+                results[step_name] = "skipped"
+                continue
             try:
                 step_fn()
                 logger.info("Bot %d: OK %s", self.config.bot_id, step_name)
+                results[step_name] = "ok"
+                consecutive_failures = 0
             except Exception as exc:
                 logger.error(
                     "Bot %d: FAIL %s -- %s", self.config.bot_id, step_name, exc
                 )
                 self.save_screenshot(f"error_{step_name.replace(' ', '_')}")
-                self.home()  # Recovery: zurueck zur Base
+                results[step_name] = f"fail: {exc}"
+                consecutive_failures += 1
+                # Recovery: zurueck zur Base mit Verifikation
+                if not self._ensure_home_screen():
+                    logger.error(
+                        "Bot %d: Recovery fehlgeschlagen -- ueberspringe Rest",
+                        self.config.bot_id,
+                    )
+                    idx = steps.index((step_name, step_fn))
+                    for remaining_step, _ in steps[idx + 1:]:
+                        results[remaining_step] = "skipped"
+                    break
 
         logger.info("Bot %d: === Daily Routine abgeschlossen ===", self.config.bot_id)
+        logger.info("Bot %d: Ergebnis: %s", self.config.bot_id, results)
+        return results

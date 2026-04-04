@@ -5,7 +5,7 @@ import logging
 import logging.handlers
 from pathlib import Path
 
-__all__ = ["BotConfig", "LastWarBot", "MatchResult"]
+__all__ = ["BotConfig", "LastWarBot", "MatchResult", "RunMetrics"]
 
 _LOG_DIR = Path(__file__).parent.parent / "logs"
 _LOG_DIR.mkdir(parents=True, exist_ok=True)

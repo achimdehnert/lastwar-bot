@@ -1,18 +1,16 @@
 # Last War: Survival Bot Platform
 
-3 parallele Bot-Instanzen auf Hetzner CX43.
+3 parallele Bot-Instanzen auf Netcup vServer.
 
 ## Server
 
 | Spec | Wert |
 |---|---|
-| Typ | Hetzner CX43 |
-| IP | 204.168.149.6 |
-| Location | Helsinki |
-| OS | Ubuntu 24.04 LTS |
-| vCPUs | 8 |
-| RAM | 16 GB |
-| SSD | 160 GB |
+| Typ | Netcup vServer |
+| Hostname | v2202603344838441511.powersrv.de |
+| IPv4 | 152.53.142.4 |
+| IPv6 | 2a0a:4cc0:c1:144:84f8:15ff:fe63:b7cd |
+| OS | Debian 13 (trixie) minimal |
 
 ## Architektur
 

@@ -1,8 +1,8 @@
 #!/bin/bash
 # =============================================================================
 # Phase 0: Last War Bot Server Setup
-# Target: Hetzner CPX42, Ubuntu 24.04 LTS
-# Mode:   Software Emulation (kein KVM -- Hetzner Cloud hat kein nested virt)
+# Target: Netcup vServer, Debian 13 (trixie)
+# Mode:   Software Emulation (kein KVM -- Netcup vServer hat kein nested virt)
 # Usage:  sudo bash scripts/00_setup_server.sh
 # =============================================================================
 set -euo pipefail
@@ -22,7 +22,7 @@ apt-get update -qq
 apt-get install -y \
   openjdk-21-jdk-headless \
   wget unzip curl git \
-  python3.12 python3.12-venv python3-pip \
+  python3 python3-venv python3-pip \
   libgl1-mesa-glx libglib2.0-0 libpulse0 \
   tesseract-ocr tesseract-ocr-deu \
   adb \
@@ -37,9 +37,10 @@ echo "OK: System-Dependencies + Redis installiert"
 # -----------------------------------------------------------------------------
 # 2. Python 3.12 (nativ auf Ubuntu 24.04)
 # -----------------------------------------------------------------------------
-echo "[2/8] Pruefe Python 3.12..."
-python3.12 --version
-echo "OK: Python 3.12 verfuegbar (nativ)"
+echo "[2/8] Pruefe Python 3..."
+PYTHON=$(command -v python3)
+$PYTHON --version
+echo "OK: $($PYTHON --version) verfuegbar"
 
 # -----------------------------------------------------------------------------
 # 3. Android SDK
@@ -127,7 +128,7 @@ mkdir -p "$BOT_DIR"/{templates,screenshots,logs}
 cd "$BOT_DIR"
 
 if [ ! -d "$BOT_DIR/.venv" ]; then
-  python3.12 -m venv .venv
+  $PYTHON -m venv .venv
 fi
 source .venv/bin/activate
 

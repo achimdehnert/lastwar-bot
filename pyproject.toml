@@ -1,8 +1,40 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lastwar-bot"
+version = "0.1.0"
+description = "Last War: Survival Game Automation Bot (3 parallel instances)"
+requires-python = ">=3.11"
+dependencies = [
+    "uiautomator2>=3.2.0",
+    "adbutils>=2.8.0",
+    "opencv-python-headless>=4.9.0",
+    "pytesseract>=0.3.10",
+    "Pillow>=10.3.0",
+    "celery[redis]>=5.4.0",
+    "redis>=5.0.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.4.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["bot"]
+
 [tool.ruff]
 line-length = 88
 
 [tool.ruff.lint]
-select = ["E", "F", "W"]
+select = ["E", "F", "W", "I", "UP", "B"]
 
-[flake8]
-max-line-length = 88
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_should_*"]

@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 
 from bot import setup_logging
 from bot.core import BotConfig, LastWarBot
+from bot.metrics import RunMetrics, write_metrics
 
 load_dotenv()
 setup_logging()
@@ -52,13 +53,18 @@ BOT_CONFIGS = [
 def run_bot_daily(self, bot_id: int) -> dict:
     """Daily Routine fuer einen Bot."""
     config = BOT_CONFIGS[bot_id - 1]
+    metrics = RunMetrics(bot_id=bot_id)
     try:
         with LastWarBot(config) as bot:
-            bot.run_daily_routine()
-        return {"bot_id": bot_id, "status": "success"}
+            results = bot.run_daily_routine()
+        metrics.finish(results)
+        write_metrics(metrics)
+        return {"bot_id": bot_id, "status": "success", "results": results}
     except Exception as exc:
         logger.error("Bot %d: Fehler -- %s", bot_id, exc)
-        raise self.retry(exc=exc)
+        metrics.finish({"run": f"fail: {exc}"})
+        write_metrics(metrics)
+        raise self.retry(exc=exc) from exc
 
 
 @app.task
@@ -76,7 +82,7 @@ def run_all_bots_daily() -> None:
 
 @app.task
 def validate_all_templates() -> dict:
-    """Pre-flight: prueft ob alle Templates fuer alle aktiven Bots vorhanden sind."""
+    """Pre-flight: prueft ob alle Templates vorhanden sind (ohne ADB-Verbindung)."""
     results = {}
     for config in BOT_CONFIGS:
         if not config.account_name:
@@ -84,8 +90,10 @@ def validate_all_templates() -> dict:
                 "ok": None, "missing": [], "skipped": True
             }
             continue
-        bot = LastWarBot(config)
-        missing = bot.validate_templates()
+        missing = [
+            name for name in LastWarBot.REQUIRED_TEMPLATES
+            if not (config.templates_dir / f"{name}.png").exists()
+        ]
         results[f"bot_{config.bot_id}"] = {
             "ok": len(missing) == 0,
             "missing": missing,
