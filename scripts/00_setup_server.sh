@@ -23,7 +23,7 @@ apt-get install -y \
   openjdk-21-jdk-headless \
   wget unzip curl git \
   python3 python3-venv python3-pip \
-  libgl1-mesa-glx libglib2.0-0 libpulse0 \
+  libgl1 libglx-mesa0 libglib2.0-0 libpulse0 \
   tesseract-ocr tesseract-ocr-deu \
   adb \
   screen \
