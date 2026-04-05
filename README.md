@@ -1,26 +1,26 @@
 # Last War: Survival Bot Platform
 
-2 parallele Bot-Instanzen auf Netcup vServer (8GB RAM Limit).
+3 parallele Bot-Instanzen auf Netcup VPS 4000 G12.
 
 ## Server
 
 | Spec | Wert |
 |---|---|
-| Typ | Netcup vServer (4 vCPU, 8GB RAM, 250GB SSD) |
-| Hostname | v2202603344838441511.powersrv.de |
-| IPv4 | 152.53.142.4 |
-| IPv6 | 2a0a:4cc0:c1:144:84f8:15ff:fe63:b7cd |
+| Typ | Netcup VPS 4000 G12 (12 vCPU, 32GB RAM, 1TB NVMe) |
+| Hostname | v2202603344838441467.ultrasrv.de |
+| IPv4 | 152.53.140.201 |
 | OS | Debian 13 (trixie) minimal |
 | Python | 3.13 |
-| Android SDK | 34 (x86_64, Software-Emulation) |
+| Android SDK | 30 (x86_64, Software-Emulation, ARM32-Translation) |
 
 ## Architektur
 
 ```
 Celery Beat (3x taeglich: 06:00, 12:30, 20:00)
     +-- run_all_bots_daily()
-            +-- Bot 1 -> emulator-5556 (AVD: lastwar-bot-2, 1536MB RAM, 1 core)
-            +-- Bot 2 -> emulator-5558 (AVD: lastwar-bot-3, 1536MB RAM, 1 core)
+            +-- Bot 1 -> emulator-5554 (AVD: lastwar-bot-1, 4096MB RAM, 3 cores)
+            +-- Bot 2 -> emulator-5556 (AVD: lastwar-bot-2, 4096MB RAM, 3 cores)
+            +-- Bot 3 -> emulator-5558 (AVD: lastwar-bot-3, 4096MB RAM, 3 cores)
 
 Systemd Services: lastwar-emulators, lastwar-celery, lastwar-beat
 Logs: logs/lastwar-bot.log (rotierend, 5x5 MB)
@@ -43,12 +43,12 @@ nano .env
 # 4. Emulatoren starten
 bash scripts/start_emulators.sh
 
-# 5. Last War APK installieren (APK muss manuell beschafft werden)
-adb -s emulator-5556 install lastwar.apk
-adb -s emulator-5558 install lastwar.apk
+# 5. Last War APK installieren (Chunked-Push Methode wegen Software-Emulation)
+# APK in 50MB Chunks splitten, pushen, auf Device assemblieren, lokal installieren
+# Siehe scripts/install_apk_chunked.sh
 
 # 6. Accounts manuell einrichten (einmalig per scrcpy)
-scrcpy -s emulator-5556
+scrcpy -s emulator-5554
 
 # 7. Services aktivieren
 systemctl enable --now lastwar-emulators lastwar-celery lastwar-beat
@@ -105,7 +105,7 @@ tail -f logs/lastwar-bot.log
 journalctl -u lastwar-celery -f
 
 # Emulator (z.B. Bot 1)
-tail -f /var/log/emulator-lastwar-bot-2.log
+tail -f /var/log/emulator-lastwar-bot-1.log
 ```
 
 ## Phasenplan
@@ -113,5 +113,6 @@ tail -f /var/log/emulator-lastwar-bot-2.log
 - **Phase 0** -- Server-Provisioning (done)
 - **Phase 1** -- Emulator-Management + Systemd (done)
 - **Phase 2** -- Bot-Framework + Dry-Run + CI/CD (done)
-- **Phase 3** -- Templates & Kalibrierung (next)
-- **Phase 4** -- Monitoring & Alerting
+- **Phase 3** -- APK Installation via Chunked-Push (done)
+- **Phase 4** -- Templates & Kalibrierung (next)
+- **Phase 5** -- Monitoring & Alerting

@@ -39,11 +39,12 @@ app.conf.update(
 
 
 # -- Bot-Konfigurationen ------------------------------------------------------
-# Netcup vServer 8GB RAM -> max 2 Emulatoren stabil (je 1.5GB + System-Overhead)
+# Netcup VPS 4000 G12 (32GB RAM) -> 3 Emulatoren (je 4GB RAM, 3 cores)
 
 BOT_CONFIGS = [
-    BotConfig(device_serial="emulator-5556", bot_id=1, account_name="JuniorCat"),
-    BotConfig(device_serial="emulator-5558", bot_id=2, account_name=""),
+    BotConfig(device_serial="emulator-5554", bot_id=1, account_name=""),
+    BotConfig(device_serial="emulator-5556", bot_id=2, account_name=""),
+    BotConfig(device_serial="emulator-5558", bot_id=3, account_name=""),
 ]
 
 _BOT_MAP: dict[int, BotConfig] = {c.bot_id: c for c in BOT_CONFIGS}

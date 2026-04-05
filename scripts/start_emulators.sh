@@ -1,21 +1,22 @@
 #!/bin/bash
 # =============================================================================
-# start_emulators.sh -- 2 AVDs headless starten (Software Emulation)
+# start_emulators.sh -- 3 AVDs headless starten (Software Emulation)
 # Kein KVM -- verwendet -accel off + swiftshader_indirect
 # Boot-Timeout: 5 Min (laenger wegen Software-Emulation)
+# Server: Netcup VPS 4000 G12 (12 vCPU, 32GB RAM, 1TB NVMe)
 # =============================================================================
 set -euo pipefail
 
 export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-$HOME/android-sdk}"
 export PATH="$PATH:$ANDROID_SDK_ROOT/emulator:$ANDROID_SDK_ROOT/platform-tools"
 
-# AVD -> ADB-Port Mapping (2 Emulatoren, 8GB RAM Limit)
-AVD_NAMES=("lastwar-bot-2" "lastwar-bot-3")
-AVD_PORTS=(5556 5558)
+# AVD -> ADB-Port Mapping (3 Emulatoren, 32GB RAM)
+AVD_NAMES=("lastwar-bot-1" "lastwar-bot-2" "lastwar-bot-3")
+AVD_PORTS=(5554 5556 5558)
 
 echo "$(date): Starte Last War Emulatoren (Software Emulation)..."
 
-for i in 0 1; do
+for i in 0 1 2; do
   AVD_NAME="${AVD_NAMES[$i]}"
   PORT="${AVD_PORTS[$i]}"
   SERIAL="emulator-${PORT}"
@@ -36,8 +37,8 @@ for i in 0 1; do
     -no-boot-anim \
     -accel off \
     -gpu swiftshader_indirect \
-    -memory 1536 \
-    -cores 1 \
+    -memory 4096 \
+    -cores 3 \
     > "/var/log/emulator-${AVD_NAME}.log" 2>&1 &
 
   echo "  PID: $!"
@@ -46,7 +47,7 @@ done
 
 echo "Warte auf Boot aller Emulatoren (Software-Emulation, kann 3-5 Min dauern)..."
 
-for i in 0 1; do
+for i in 0 1 2; do
   AVD_NAME="${AVD_NAMES[$i]}"
   PORT="${AVD_PORTS[$i]}"
   SERIAL="emulator-${PORT}"
